@@ -202,7 +202,7 @@
         </div>
         <div>
             <label for="fileInput" class="file-upload-btn">
-                <i data-lucide="upload"></i> Cargar Excel Local (Respaldo)
+                <i data-lucide="upload"></i> Cargar Archivo Excel Local
             </label>
             <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
         </div>
@@ -213,11 +213,11 @@
         <!-- Estado de Carga -->
         <div id="emptyState" class="empty-state">
             <div class="spinner" id="loadingSpinner"></div>
-            <h2 id="loadingTitle">Sincronizando con Google Sheets...</h2>
-            <p id="loadingText">Obteniendo datos actualizados automáticamente desde la nube.</p>
+            <h2 id="loadingTitle">Sincronizando datos...</h2>
+            <p id="loadingText">Obteniendo información desde Google Sheets.</p>
             <div id="errorActions" style="display: none; margin-top: 1rem;">
                 <label for="fileInput" class="file-upload-btn" style="display: inline-flex;">
-                    <i data-lucide="folder-open"></i> Seleccionar archivo Excel local como respaldo
+                    <i data-lucide="folder-open"></i> Cargar archivo Excel local
                 </label>
             </div>
         </div>
@@ -341,7 +341,6 @@
 
             <!-- Tablas -->
             <div class="table-section-grid">
-                <!-- Tabla Análisis por Zona -->
                 <div class="table-card">
                     <div class="chart-header">Análisis por Zona</div>
                     <div class="table-wrapper">
@@ -372,7 +371,6 @@
                     </div>
                 </div>
 
-                <!-- Tabla Líderes en Riesgo de Desactivación -->
                 <div class="table-card">
                     <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center;">
                         <span>Líderes en Riesgo de Desactivación</span>
@@ -411,7 +409,6 @@
     </div>
 
     <script>
-        // Enrutado a través de proxy CORS libre para evitar bloqueos del navegador en GitHub Pages
         const RAW_GOOGLE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSqHExzFLQnHlfEto8uFRIYT7EOHSlSBAg6uLEo2pE9ndNmOl3CemXgkvAfWRhwoNV_jmPSLOLTSQAm/pub?output=csv";
         const GOOGLE_SHEET_CSV_URL = "https://api.allorigins.win/raw?url=" + encodeURIComponent(RAW_GOOGLE_CSV);
 
@@ -444,19 +441,18 @@
                         populateFilters();
                         applyFilters();
                     } else {
-                        showFallbackError("La hoja de Google Sheets está vacía o no se pudo interpretar.");
+                        showFallbackError("No se pudieron extraer datos válidos del reporte.");
                     }
                 },
                 error: function(err) {
-                    console.warn("Error PapaParse:", err);
-                    showFallbackError("El navegador bloqueó la conexión. Utiliza el botón de respaldo local.");
+                    showFallbackError("No se pudo conectar a la nube. Usa la opción de carga local.");
                 }
             });
         }
 
         function showFallbackError(msg) {
             document.getElementById('loadingSpinner').style.display = 'none';
-            document.getElementById('loadingTitle').textContent = 'No se pudo cargar automáticamente desde la nube';
+            document.getElementById('loadingTitle').textContent = 'Atención';
             document.getElementById('loadingText').textContent = msg;
             document.getElementById('errorActions').style.display = 'block';
         }
@@ -489,73 +485,58 @@
         }
 
         function parseExcelData(json) {
-            const keys = Object.keys(json[0] || {});
-            const findKey = (candidates) => keys.find(k => candidates.some(c => k.trim().toLowerCase().includes(c.toLowerCase()))) || keys[0];
+            if (!json || json.length === 0) return [];
+            const keys = Object.keys(json[0]);
 
-            const colCampana = findKey(['Campaña', 'CAMPAÑA', 'Periodo']);
-            const colRegion = findKey(['Región', 'REGIONAL', 'Region']);
-            const colZona = findKey(['Zona', 'ZONA']);
-            const colCorte = findKey(['Corte', 'CORTE']);
-            const colSectores = findKey(['Sectores', 'SECTOR']);
-            const colActivas = findKey(['Lideres Activas', 'Activas', 'ESTADO']);
-            const colActivaciones = findKey(['Activaciones Campaña', 'Incorporaciones']);
-            const colEgresos = findKey(['Egresos Campaña', 'Egreso']);
-            const colRotacion = findKey(['% Rotación', 'Rotación']);
+            const getVal = (row, names) => {
+                const foundKey = keys.find(k => names.some(n => k.trim().toLowerCase() === n.toLowerCase() || k.trim().toLowerCase().includes(n.toLowerCase())));
+                return foundKey ? row[foundKey] : null;
+            };
 
             return json.map(row => {
-                let activasNum = parseFloat(row[colActivas]) || 0;
-                let egresosNum = parseFloat(row[colEgresos]) || 0;
-                if (typeof row[colActivas] === 'string') {
-                    const st = row[colActivas].toUpperCase();
-                    activasNum = st.includes('ACT') ? 1 : 0;
-                    egresosNum = st.includes('EGR') ? 1 : 0;
-                }
+                const campana = String(getVal(row, ['campaña', 'campana', 'periodo']) || '').trim();
+                const region = String(getVal(row, ['región', 'region', 'regional']) || '').trim();
+                const zona = String(getVal(row, ['zona']) || '').trim();
+                const corte = String(getVal(row, ['corte']) || '').trim();
 
-                return {
-                    campana: String(row[colCampana] || 'N/A').trim(),
-                    region: String(row[colRegion] || 'SIN REGION').trim(),
-                    zona: String(row[colZona] || '0').trim(),
-                    corte: String(row[colCorte] || '0').trim(),
-                    sectores: parseFloat(row[colSectores]) || 1,
-                    activas: activasNum,
-                    activaciones: parseFloat(row[colActivaciones]) || 0,
-                    egresos: egresosNum,
-                    rotacion: parseFloat(row[colRotacion]) || 0
-                };
-            }).filter(d => d.campana !== '' && d.campana !== 'N/A');
+                const sectores = parseFloat(getVal(row, ['sectores', 'sector_total'])) || 1;
+                const activas = parseFloat(getVal(row, ['líderes activas', 'lideres activas', 'activas'])) || 0;
+                const activaciones = parseFloat(getVal(row, ['activaciones campaña', 'activaciones', 'incorporaciones'])) || 0;
+                const egresos = parseFloat(getVal(row, ['egresos campaña', 'egresos'])) || 0;
+                const rotacion = parseFloat(getVal(row, ['% rotación', 'rotacion'])) || 0;
+
+                return { campana, region, zona, corte, sectores, activas, activaciones, egresos, rotacion };
+            }).filter(d => d.campana !== '' && d.region !== '' && d.zona !== '' && d.campana.toUpperCase() !== 'CAMPAÑA');
         }
 
         function parseLiquidacionesData(json) {
             if (!json || json.length === 0) return [];
             const keys = Object.keys(json[0]);
-            const findKey = (candidates) => keys.find(k => candidates.some(c => k.trim().toLowerCase().includes(c.toLowerCase()))) || keys[0];
 
-            const colCampana = findKey(['Campaña', 'CAMPAÑA']);
-            const colRegion = findKey(['Región', 'REGIONAL']);
-            const colZona = findKey(['Zona', 'ZONA']);
-            const colCorte = findKey(['Corte', 'CORTE']);
-            const colSector = findKey(['Sector', 'SECTOR']);
-            const colNombre = findKey(['Nombre y Apellido', 'NOMBRE']);
-            const colIncorp = findKey(['Incorporaciones']);
-            const colDni = findKey(['DNI Lider', 'DNI', 'CEDULA']);
+            const getVal = (row, names) => {
+                const foundKey = keys.find(k => names.some(n => k.trim().toLowerCase() === n.toLowerCase() || k.trim().toLowerCase().includes(n.toLowerCase())));
+                return foundKey ? row[foundKey] : null;
+            };
 
-            return json.map(row => ({
-                campana: String(row[colCampana] || 'N/A').trim(),
-                region: String(row[colRegion] || 'SIN REGION').trim(),
-                zona: String(row[colZona] || '0').trim(),
-                corte: String(row[colCorte] || '0').trim(),
-                sector: String(row[colSector] || '0').trim(),
-                nombre: String(row[colNombre] || 'Líder').trim(),
-                dni: String(row[colDni] || row[colNombre]).trim(),
-                incorp: parseFloat(row[colIncorp]) || 0
-            }));
+            return json.map(row => {
+                const campana = String(getVal(row, ['campaña', 'campana', 'periodo']) || '').trim();
+                const region = String(getVal(row, ['región', 'region', 'regional']) || '').trim();
+                const zona = String(getVal(row, ['zona']) || '').trim();
+                const corte = String(getVal(row, ['corte']) || '').trim();
+                const sector = String(getVal(row, ['sector']) || '').trim();
+                const nombre = String(getVal(row, ['nombre y apellido', 'nombre', 'lider']) || 'Líder').trim();
+                const dni = String(getVal(row, ['dni lider', 'dni', 'cedula']) || nombre).trim();
+                const incorp = parseFloat(getVal(row, ['incorporaciones', 'incorp'])) || 0;
+
+                return { campana, region, zona, corte, sector, nombre, dni, incorp };
+            }).filter(d => d.campana !== '' && d.region !== '' && d.dni !== '' && d.campana.toUpperCase() !== 'CAMPAÑA');
         }
 
         function populateFilters() {
-            const campanas = [...new Set(rawData.map(d => d.campana))].sort();
-            const regiones = [...new Set(rawData.map(d => d.region))].sort();
-            const zonas = [...new Set(rawData.map(d => d.zona))].sort();
-            const cortes = [...new Set(rawData.map(d => d.corte))].sort();
+            const campanas = [...new Set(rawData.map(d => d.campana))].filter(Boolean).sort();
+            const regiones = [...new Set(rawData.map(d => d.region))].filter(Boolean).sort();
+            const zonas = [...new Set(rawData.map(d => d.zona))].filter(Boolean).sort();
+            const cortes = [...new Set(rawData.map(d => d.corte))].filter(Boolean).sort();
 
             fillSelect('filterCampana', campanas, campanas[campanas.length - 1]);
             fillSelect('filterRegion', regiones, 'TODOS');
@@ -591,7 +572,7 @@
                        (selCorte === 'TODOS' || d.corte === selCorte);
             });
 
-            const allCampanas = [...new Set(rawData.map(d => d.campana))].sort();
+            const allCampanas = [...new Set(rawData.map(d => d.campana))].filter(Boolean).sort();
             const currIdx = allCampanas.indexOf(selCampana);
             const prevCampana = currIdx > 0 ? allCampanas[currIdx - 1] : null;
 
@@ -612,7 +593,7 @@
         }
 
         function resetFilters() {
-            const allCampanas = [...new Set(rawData.map(d => d.campana))].sort();
+            const allCampanas = [...new Set(rawData.map(d => d.campana))].filter(Boolean).sort();
             document.getElementById('filterCampana').value = allCampanas[allCampanas.length - 1] || 'TODOS';
             document.getElementById('filterRegion').value = 'TODOS';
             document.getElementById('filterZona').value = 'TODOS';
@@ -625,274 +606,4 @@
         function calculateKPIs(curr, prev) {
             const sumCurrActivas = curr.reduce((a, b) => a + b.activas, 0);
             const sumCurrSectores = curr.reduce((a, b) => a + b.sectores, 0) || 1;
-            const sumCurrActivaciones = curr.reduce((a, b) => a + b.activaciones, 0);
-            const sumCurrEgresos = curr.reduce((a, b) => a + b.egresos, 0);
-
-            const sumPrevActivas = prev.reduce((a, b) => a + b.activas, 0);
-            const sumPrevSectores = prev.reduce((a, b) => a + b.sectores, 0) || 1;
-
-            const cobCurr = (sumCurrActivas / sumCurrSectores) * 100;
-            const cobPrev = (sumPrevActivas / sumPrevSectores) * 100;
-
-            const varPpCob = cobCurr - cobPrev;
-            const varAbsActivas = sumCurrActivas - sumPrevActivas;
-            const varPctActivas = sumPrevActivas > 0 ? ((varAbsActivas / sumPrevActivas) * 100) : 0;
-
-            const promAct = (sumCurrActivas + sumPrevActivas) / 2 || 1;
-            const rotacion = (sumCurrEgresos / promAct) * 100;
-
-            document.getElementById('kpiCoberturaValue').textContent = cobCurr.toFixed(1) + '%';
-            document.getElementById('kpiCoberturaAnt').textContent = cobPrev.toFixed(1) + '%';
-            document.getElementById('kpiCoberturaPp').textContent = (varPpCob >= 0 ? '+' : '') + varPpCob.toFixed(1) + ' pp';
-            
-            const cBadge = document.getElementById('kpiCoberturaBadge');
-            cBadge.textContent = (varPpCob >= 0 ? '↑ ' : '↓ ') + Math.abs(varPpCob).toFixed(1) + ' pp';
-            cBadge.className = 'kpi-badge ' + (varPpCob >= 0 ? 'positive' : 'negative');
-
-            document.getElementById('kpiActivasValue').textContent = sumCurrActivas.toLocaleString();
-            document.getElementById('kpiActivasAnt').textContent = sumPrevActivas.toLocaleString();
-            document.getElementById('kpiActivasAbs').textContent = (varAbsActivas >= 0 ? '+' : '') + varAbsActivas.toLocaleString();
-
-            const aBadge = document.getElementById('kpiActivasBadge');
-            aBadge.textContent = (varPctActivas >= 0 ? '↑ ' : '↓ ') + Math.abs(varPctActivas).toFixed(1) + '%';
-            aBadge.className = 'kpi-badge ' + (varPctActivas >= 0 ? 'positive' : 'negative');
-
-            document.getElementById('kpiActivacionesValue').textContent = sumCurrActivaciones.toLocaleString();
-            document.getElementById('kpiTasaActivacion').textContent = ((sumCurrActivaciones / sumCurrSectores) * 100).toFixed(1) + '%';
-
-            document.getElementById('kpiEgresosValue').textContent = sumCurrEgresos.toLocaleString();
-            document.getElementById('kpiTasaEgreso').textContent = ((sumCurrEgresos / sumCurrSectores) * 100).toFixed(1) + '%';
-            document.getElementById('kpiRotacionBadge').textContent = rotacion.toFixed(1) + '% Rotación';
-
-            generateInsights(cobCurr, varPpCob, rotacion, sumCurrEgresos);
-        }
-
-        function generateInsights(cob, varPp, rot, egresos) {
-            const ul = document.getElementById('insightsList');
-            ul.innerHTML = '';
-
-            const li1 = document.createElement('li');
-            li1.innerHTML = varPp >= 0 
-                ? `<strong>Evolución de Cobertura:</strong> Incremento de <strong>+${varPp.toFixed(1)} pp</strong> comparado con la campaña anterior.`
-                : `<strong>Atención en Cobertura:</strong> Disminución de <strong>${varPp.toFixed(1)} pp</strong> respecto a la campaña previa.`;
-            ul.appendChild(li1);
-
-            const li2 = document.createElement('li');
-            li2.innerHTML = rot > 10 
-                ? `<strong>Nivel de Rotación:</strong> Rotación del <strong>${rot.toFixed(1)}%</strong> (${egresos} egresos). Monitorear zonas críticas.`
-                : `<strong>Nivel de Rotación:</strong> Rotación estable del <strong>${rot.toFixed(1)}%</strong> dentro de rangos normales.`;
-            ul.appendChild(li2);
-        }
-
-        function renderCharts(selCampana, selRegion, selZona, selCorte) {
-            const allCampanas = [...new Set(rawData.map(d => d.campana))].sort();
-
-            const dataActivas = allCampanas.map(c => {
-                return rawData.filter(d => d.campana === c &&
-                    (selRegion === 'TODOS' || d.region === selRegion) &&
-                    (selZona === 'TODOS' || d.zona === selZona) &&
-                    (selCorte === 'TODOS' || d.corte === selCorte)
-                ).reduce((a, b) => a + b.activas, 0);
-            });
-
-            const ctxEvol = document.getElementById('chartEvolucion').getContext('2d');
-            if (chartEvolucionInstance) chartEvolucionInstance.destroy();
-
-            chartEvolucionInstance = new Chart(ctxEvol, {
-                type: 'line',
-                data: {
-                    labels: allCampanas,
-                    datasets: [
-                        { label: 'Líderes Activas', data: dataActivas, borderColor: '#0071CE', backgroundColor: 'rgba(0,113,206,0.15)', fill: true, tension: 0.3, borderWidth: 3 }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false }
-            });
-
-            const regiones = [...new Set(rawData.map(d => d.region))].sort();
-            const dataRegActivas = regiones.map(r => {
-                return rawData.filter(d => d.region === r && (selCampana === 'TODOS' || d.campana === selCampana))
-                    .reduce((a, b) => a + b.activas, 0);
-            });
-
-            const ctxReg = document.getElementById('chartRegion').getContext('2d');
-            if (chartRegionInstance) chartRegionInstance.destroy();
-
-            chartRegionInstance = new Chart(ctxReg, {
-                type: 'bar',
-                data: {
-                    labels: regiones,
-                    datasets: [{ label: 'Activas por Región', data: dataRegActivas, backgroundColor: '#FEDD3C', borderColor: '#231F20', borderWidth: 1 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false }
-            });
-        }
-
-        function renderTableZonas(currData, prevData, filterEstado = 'TODOS') {
-            const tbody = document.getElementById('tableZonasBody');
-            tbody.innerHTML = '';
-
-            const aggCurr = {};
-            currData.forEach(d => {
-                const key = `${d.region}___${d.zona}`;
-                if (!aggCurr[key]) aggCurr[key] = { region: d.region, zona: d.zona, sectores: 0, activas: 0, activaciones: 0, egresos: 0 };
-                aggCurr[key].sectores += d.sectores;
-                aggCurr[key].activas += d.activas;
-                aggCurr[key].activaciones += d.activaciones;
-                aggCurr[key].egresos += d.egresos;
-            });
-
-            const aggPrev = {};
-            prevData.forEach(d => {
-                const key = `${d.region}___${d.zona}`;
-                if (!aggPrev[key]) aggPrev[key] = { activas: 0 };
-                aggPrev[key].activas += d.activas;
-            });
-
-            Object.values(aggCurr).forEach(item => {
-                const key = `${item.region}___${item.zona}`;
-                const prevActivas = aggPrev[key] ? aggPrev[key].activas : item.activas;
-
-                const cobPct = item.sectores > 0 ? (item.activas / item.sectores) * 100 : 0;
-                const rot = item.activas > 0 ? (item.egresos / item.activas) * 100 : 0;
-
-                let estadoText = 'Se Mantuvo';
-                let estadoClass = 'status-maintained';
-
-                if (item.activas > prevActivas) {
-                    estadoText = 'Creció';
-                    estadoClass = 'status-grew';
-                } else if (item.activas < prevActivas) {
-                    estadoText = 'Decreció';
-                    estadoClass = 'status-decreased';
-                }
-
-                if (filterEstado !== 'TODOS' && estadoText !== filterEstado) return;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${item.region}</strong></td>
-                    <td>${item.zona}</td>
-                    <td>${item.sectores}</td>
-                    <td><strong>${item.activas}</strong></td>
-                    <td><strong>${cobPct.toFixed(1)}%</strong></td>
-                    <td><span style="color: var(--brand-green-dark); font-weight:700;">+${item.activaciones}</span></td>
-                    <td><span style="color: var(--brand-red); font-weight:700;">-${item.egresos}</span></td>
-                    <td>${rot.toFixed(1)}%</td>
-                    <td><span class="status-pill ${estadoClass}">${estadoText}</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function renderTableRiesgo(selCampana, selRegion, selZona, selCorte, filterRiesgo = 'TODOS') {
-            const tbody = document.getElementById('tableRiesgoBody');
-            tbody.innerHTML = '';
-
-            if (!rawLiquidaciones || rawLiquidaciones.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:1.5rem; color:var(--brand-grey-dark);">Sin datos registrados.</td></tr>';
-                document.getElementById('kpiRiesgoAltoValue').textContent = '0';
-                document.getElementById('kpiRiesgoAltoBadge').textContent = '0% Alto';
-                document.getElementById('kpiRiesgoMedioValue').textContent = '0';
-                document.getElementById('kpiRiesgoBajoValue').textContent = '0';
-                return;
-            }
-
-            const allCampanas = [...new Set(rawLiquidaciones.map(d => d.campana))].sort();
-            let currIdx = allCampanas.indexOf(selCampana);
-            if (currIdx === -1) currIdx = allCampanas.length - 1;
-
-            const cCurr = allCampanas[currIdx];
-            const cN1 = currIdx >= 1 ? allCampanas[currIdx - 1] : null;
-            const cN2 = currIdx >= 2 ? allCampanas[currIdx - 2] : null;
-
-            const leadersMap = {};
-            rawLiquidaciones.filter(d => d.campana === cCurr &&
-                (selRegion === 'TODOS' || d.region === selRegion) &&
-                (selZona === 'TODOS' || d.zona === selZona) &&
-                (selCorte === 'TODOS' || d.corte === selCorte)
-            ).forEach(d => {
-                leadersMap[d.dni] = {
-                    region: d.region,
-                    zona: d.zona,
-                    corte: d.corte,
-                    sector: d.sector,
-                    nombre: d.nombre,
-                    incorpCurr: d.incorp,
-                    incorpN1: 0,
-                    incorpN2: 0
-                };
-            });
-
-            if (cN1) {
-                rawLiquidaciones.filter(d => d.campana === cN1).forEach(d => {
-                    if (leadersMap[d.dni]) leadersMap[d.dni].incorpN1 = d.incorp;
-                });
-            }
-            if (cN2) {
-                rawLiquidaciones.filter(d => d.campana === cN2).forEach(d => {
-                    if (leadersMap[d.dni]) leadersMap[d.dni].incorpN2 = d.incorp;
-                });
-            }
-
-            let cntAlto = 0;
-            let cntMedio = 0;
-            let cntBajo = 0;
-            let cntTotal = Object.keys(leadersMap).length || 1;
-
-            Object.values(leadersMap).forEach(l => {
-                const lowCurr = l.incorpCurr < 3;
-                const lowN1 = l.incorpN1 < 3;
-                const lowN2 = l.incorpN2 < 3;
-
-                let lowCount = 0;
-                if (lowCurr) {
-                    lowCount = 1;
-                    if (lowN1) {
-                        lowCount = 2;
-                        if (lowN2) lowCount = 3;
-                    }
-                }
-
-                let riesgoLabel = 'Sin Riesgo';
-                let riesgoClass = 'risk-none';
-
-                if (lowCount === 3) {
-                    riesgoLabel = 'Riesgo Alto';
-                    riesgoClass = 'risk-high';
-                    cntAlto++;
-                } else if (lowCount === 2) {
-                    riesgoLabel = 'Riesgo Medio';
-                    riesgoClass = 'risk-medium';
-                    cntMedio++;
-                } else if (lowCount === 1) {
-                    riesgoLabel = 'Riesgo Bajo';
-                    riesgoClass = 'risk-low';
-                    cntBajo++;
-                }
-
-                if (filterRiesgo !== 'TODOS' && riesgoLabel !== filterRiesgo) return;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${l.region}</strong></td>
-                    <td>${l.zona}</td>
-                    <td>${l.sector}</td>
-                    <td><strong>${l.nombre}</strong></td>
-                    <td style="text-align:center;">${l.incorpCurr}</td>
-                    <td style="text-align:center;">${cN1 ? l.incorpN1 : '-'}</td>
-                    <td style="text-align:center;">${cN2 ? l.incorpN2 : '-'}</td>
-                    <td><span class="status-pill ${riesgoClass}">${riesgoLabel}</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-            const pctAlto = (cntAlto / cntTotal) * 100;
-            document.getElementById('kpiRiesgoAltoValue').textContent = cntAlto.toLocaleString();
-            document.getElementById('kpiRiesgoAltoBadge').textContent = pctAlto.toFixed(1) + '% Alto';
-            document.getElementById('kpiRiesgoMedioValue').textContent = cntMedio.toLocaleString();
-            document.getElementById('kpiRiesgoBajoValue').textContent = cntBajo.toLocaleString();
-        }
-    </script>
-</body>
-</html>
+            const sumCurrActivaciones = curr.reduce((a, b
