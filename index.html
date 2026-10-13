@@ -10,8 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- CDN Libraries: SheetJS, Chart.js, Lucide Icons -->
+    <!-- CDN Libraries: SheetJS, PapaParse, Chart.js, Lucide Icons -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -180,3 +181,310 @@
         .spinner {
             border: 4px solid rgba(0,0,0,0.1);
             width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border-left-color: var(--brand-yellow);
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <div class="logo-badge">AZZORTI</div>
+            <div class="header-title">
+                <h1>Cobertura de Líderes</h1>
+                <p>Dashboard Gerencial Ejecutivo & Operativo</p>
+            </div>
+        </div>
+        <div>
+            <label for="fileInput" class="file-upload-btn">
+                <i data-lucide="upload"></i> Cargar Excel Local (Respaldo)
+            </label>
+            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+        </div>
+    </header>
+
+    <div class="container">
+
+        <!-- Estado de Carga -->
+        <div id="emptyState" class="empty-state">
+            <div class="spinner" id="loadingSpinner"></div>
+            <h2 id="loadingTitle">Sincronizando con Google Sheets...</h2>
+            <p id="loadingText">Obteniendo datos actualizados automáticamente desde la nube.</p>
+        </div>
+
+        <div id="dashboardContent" style="display: none;">
+
+            <!-- Filtros Principales -->
+            <div class="filter-card">
+                <div class="filter-header">
+                    <div class="filter-title"><i data-lucide="sliders"></i> Filtros Principales</div>
+                    <div class="filter-actions">
+                        <span id="activeFiltersBadge" style="font-size: 0.75rem; color: var(--brand-grey-dark); font-weight: 600;"></span>
+                        <button class="btn-reset" onclick="resetFilters()">
+                            <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i> Limpiar Filtros
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label for="filterCampana">Campaña</label>
+                        <select id="filterCampana" onchange="applyFilters()"></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterRegion">Región</label>
+                        <select id="filterRegion" onchange="applyFilters()"></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterZona">Zona</label>
+                        <select id="filterZona" onchange="applyFilters()"></select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filterCorte">Corte</label>
+                        <select id="filterCorte" onchange="applyFilters()"></select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div class="insights-banner">
+                <div class="insights-icon"><i data-lucide="sparkles" style="width: 24px; height: 24px;"></i></div>
+                <div class="insights-content">
+                    <h3>Insights Gerenciales Automáticos</h3>
+                    <ul id="insightsList"></ul>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="kpi-grid">
+                <div class="kpi-card yellow">
+                    <div class="kpi-header"><span class="kpi-title">% Cobertura Líderes</span><i data-lucide="pie-chart"></i></div>
+                    <div class="kpi-value-container">
+                        <span class="kpi-value" id="kpiCoberturaValue">0%</span>
+                        <span class="kpi-badge positive" id="kpiCoberturaBadge">0 pp</span>
+                    </div>
+                    <div class="kpi-subtext">
+                        <span>Ant: <strong id="kpiCoberturaAnt">0%</strong></span>
+                        <span>Var. Abs: <strong id="kpiCoberturaPp">0 pp</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card blue">
+                    <div class="kpi-header"><span class="kpi-title">Líderes Activas</span><i data-lucide="users"></i></div>
+                    <div class="kpi-value-container">
+                        <span class="kpi-value" id="kpiActivasValue">0</span>
+                        <span class="kpi-badge positive" id="kpiActivasBadge">0%</span>
+                    </div>
+                    <div class="kpi-subtext">
+                        <span>Ant: <strong id="kpiActivasAnt">0</strong></span>
+                        <span>Var. Abs: <strong id="kpiActivasAbs">0</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card green">
+                    <div class="kpi-header"><span class="kpi-title">Nuevas Activaciones</span><i data-lucide="user-plus"></i></div>
+                    <div class="kpi-value-container">
+                        <span class="kpi-value" id="kpiActivacionesValue">0</span>
+                        <span class="kpi-badge positive" id="kpiActivacionesBadge">0%</span>
+                    </div>
+                    <div class="kpi-subtext">
+                        <span>Tasa Ingreso: <strong id="kpiTasaActivacion">0%</strong></span>
+                        <span>Ant: <strong id="kpiActivacionesAnt">0</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card red">
+                    <div class="kpi-header"><span class="kpi-title">Egresos / Rotación</span><i data-lucide="user-minus"></i></div>
+                    <div class="kpi-value-container">
+                        <span class="kpi-value" id="kpiEgresosValue">0</span>
+                        <span class="kpi-badge negative" id="kpiRotacionBadge">0% Rot</span>
+                    </div>
+                    <div class="kpi-subtext">
+                        <span>Ant: <strong id="kpiEgresosAnt">0</strong></span>
+                        <span>Tasa Egreso: <strong id="kpiTasaEgreso">0%</strong></span>
+                    </div>
+                </div>
+
+                <div class="kpi-card purple">
+                    <div class="kpi-header"><span class="kpi-title">Riesgo Desactivación</span><i data-lucide="alert-triangle"></i></div>
+                    <div class="kpi-value-container">
+                        <span class="kpi-value" id="kpiRiesgoAltoValue">0</span>
+                        <span class="kpi-badge critical" id="kpiRiesgoAltoBadge">0% Alto</span>
+                    </div>
+                    <div class="kpi-subtext">
+                        <span>Riesgo Medio: <strong id="kpiRiesgoMedioValue">0</strong></span>
+                        <span>Riesgo Bajo: <strong id="kpiRiesgoBajoValue">0</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-header">Evolución Histórica de Líderes Activas</div>
+                    <div class="chart-container"><canvas id="chartEvolucion"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">Activas por Región Comercial</div>
+                    <div class="chart-container"><canvas id="chartRegion"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Tablas -->
+            <div class="table-section-grid">
+                <!-- Tabla Análisis por Zona -->
+                <div class="table-card">
+                    <div class="chart-header">Análisis por Zona</div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Región</th>
+                                    <th>Zona</th>
+                                    <th>Sectores Total</th>
+                                    <th>Líderes Activas</th>
+                                    <th>% Cobertura</th>
+                                    <th>Activaciones</th>
+                                    <th>Egresos</th>
+                                    <th>% Rotación</th>
+                                    <th>
+                                        Estado 
+                                        <select id="filterTableEstado" class="table-filter-select" onchange="applyFilters()">
+                                            <option value="TODOS">-- Todos --</option>
+                                            <option value="Creció">Creció</option>
+                                            <option value="Decreció">Decreció</option>
+                                            <option value="Se Mantuvo">Se Mantuvo</option>
+                                        </select>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableZonasBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabla Líderes en Riesgo de Desactivación -->
+                <div class="table-card">
+                    <div class="chart-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>Líderes en Riesgo de Desactivación</span>
+                        <span style="font-size:0.75rem; color:var(--brand-grey-medium); font-weight:normal;">Evaluado sobre Incorporaciones (&lt;3 en últimas campañas)</span>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Región</th>
+                                    <th>Zona</th>
+                                    <th>Sector</th>
+                                    <th>Nombre de la Líder</th>
+                                    <th>Incorp. Campaña Actual</th>
+                                    <th>Incorp. Campaña N-1</th>
+                                    <th>Incorp. Campaña N-2</th>
+                                    <th>
+                                        Nivel de Riesgo
+                                        <select id="filterTableRiesgo" class="table-filter-select" onchange="applyFilters()">
+                                            <option value="TODOS">-- Todos --</option>
+                                            <option value="Riesgo Alto">Riesgo Alto</option>
+                                            <option value="Riesgo Medio">Riesgo Medio</option>
+                                            <option value="Riesgo Bajo">Riesgo Bajo</option>
+                                            <option value="Sin Riesgo">Sin Riesgo</option>
+                                        </select>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableRiesgoBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // URL pública de Google Sheets en formato CSV
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSqHExzFLQnHlfEto8uFRIYT7EOHSlSBAg6uLEo2pE9ndNmOl3CemXgkvAfWRhwoNV_jmPSLOLTSQAm/pub?output=csv";
+
+        let rawData = [];
+        let rawLiquidaciones = [];
+        let chartEvolucionInstance = null;
+        let chartRegionInstance = null;
+
+        lucide.createIcons();
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadGoogleSheetCsv(GOOGLE_SHEET_CSV_URL);
+        });
+
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+
+        function loadGoogleSheetCsv(url) {
+            Papa.parse(url, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        rawData = parseExcelData(results.data);
+                        rawLiquidaciones = parseLiquidacionesData(results.data);
+
+                        document.getElementById('emptyState').style.display = 'none';
+                        document.getElementById('dashboardContent').style.display = 'block';
+
+                        populateFilters();
+                        applyFilters();
+                    } else {
+                        showFallbackError();
+                    }
+                },
+                error: function(err) {
+                    console.warn("Error cargando desde Google Sheets:", err);
+                    showFallbackError();
+                }
+            });
+        }
+
+        function showFallbackError() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('loadingTitle').textContent = 'No se pudo leer la hoja de Google Sheets';
+            document.getElementById('loadingText').textContent = 'Comprueba tu conexión o utiliza el botón superior para seleccionar tu archivo Excel local como respaldo.';
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+
+                    rawData = parseExcelData(json);
+                    rawLiquidaciones = parseLiquidacionesData(json);
+
+                    document.getElementById('emptyState').style.display = 'none';
+                    document.getElementById('dashboardContent').style.display = 'block';
+
+                    populateFilters();
+                    applyFilters();
+                } catch(err) {
+                    alert("Error procesando archivo local: " + err.message);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseExcelData(json) {
+            const keys = Object.keys(json[0] || {});
+            const findKey = (candidates) => keys.find(k => candidates.some(c => k.trim().toLowerCase().includes(c.toLowerCase()))) || keys[0];
+
+            const colCampana = findKey(['Campaña', 'CAMPAÑA', 'Periodo']);
+            const colRegion = findKey(['Región', 'REGIONAL', 'Region']);
+            const col
